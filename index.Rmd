@@ -1,0 +1,88 @@
+---
+title: "Prediction of Exercise Manner"
+author: "Caitlin"
+date: "May 21, 2017"
+output: 
+  html_document: 
+    keep_md: yes
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE)
+```
+
+##Summary
+This project was done to predict the manner in which participants did the weight lifting exercise given, listed as the `classe` variable in the given dataset. Data was collected from accelerometers on the belt, forearm, arm, and dumbbell of each participant. There are five classes of the outcome variable, with 159 predictors.
+
+##Preparation
+To begin with, necessary packages and data are loaded.
+
+```{r}
+library(caret)
+library(randomForest)
+
+training <- read.csv("C:/Users/Caitlin/Documents/Coursera/pml-training.csv")
+testing <- read.csv("C:/Users/Caitlin/Documents/Coursera/pml-testing.csv")
+```
+
+In order to have the best environment for model building, the variables with near-zero variance or NA values are removed from both the testing and training sets, as well as categorical variables such as `user_name` that will have no effect on the model. If necessary, variables can be added back in with missing values imputed.
+
+```{r}
+nsv <- nearZeroVar(training,saveMetrics=TRUE)
+training_no_nzv <- training[,!nsv$nzv]
+testing_no_nzv <- testing[,!nsv$nzv]
+
+training_no_na <- training_no_nzv[,(colSums(is.na(training_no_nzv)) == 0)]
+testing_no_na <- testing_no_nzv[,(colSums(is.na(testing_no_nzv)) == 0)]
+
+remove_col_train <- c("X","user_name","raw_timestamp_part_1","raw_timestamp_part_2","cvtd_timestamp","num_window")
+remove_col_test <- c("X","user_name","raw_timestamp_part_1","raw_timestamp_part_2","cvtd_timestamp","num_window","problem_id")
+training_small <- training_no_na[,!(names(training_no_na) %in% remove_col_train)]
+testing_small <- testing_no_na[,!(names(testing_no_na) %in% remove_col_test)]
+```
+
+In order to do cross-validation, the training set is split into training and validation sets.
+
+```{r}
+inTrain <- createDataPartition(y=training$classe, p=0.7, list=FALSE)
+training_final <- training_small[inTrain,]
+validation <- training_small[-inTrain,]
+```
+
+##Model Building
+A random forest model seems like the best fit for the data. After building the model, predict on the validation set and check the confusion matrix.
+
+```{r, cache = TRUE}
+set.seed(333)
+modFit1 <- train(classe~., method = 'rf', data = training_final, trControl = trainControl(method = 'cv', number = 4))
+
+pred <- predict(modFit1, newdata = validation)
+confusionMatrix(pred, validation$classe)
+
+modFit1$finalModel
+
+accuracy <- sum(pred == validation$classe) / length(pred)
+
+error <- (1 - accuracy) * 100
+```
+
+The random forest model has an accuracy of `r accuracy`, so the out-of-sample error estimate is `r round(error, 3)`%. These are both indicators of good model fit, so there is no need to redo the model with missing values imputed.
+
+##Prediction
+Finally the model is used to predict on the test set.
+
+```{r}
+test_pred <- predict(modFit1, testing_small)
+
+final <- data.frame(Predictions = character(), stringsAsFactors = FALSE)
+
+for (i in 1:length(test_pred)) {
+  final[i, 1] <- paste("problem_id ", i, ": ", test_pred[i])
+}
+
+final
+```
+
+
+
+
